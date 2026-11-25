@@ -1,0 +1,34 @@
+[package]
+name = "archives-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "archives-core for Archives on Android: bindings for Kotlin (UniFFI)"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "archives_ffi"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+archives-core = { path = "../../core" }
+uniffi = { version = "0.32.2", features = ["cli"] }
+libc = "0.2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+# Symbols stay: the bindings are generated from the library's own metadata.
+strip = "debuginfo"
+opt-level = 3
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

@@ -1,0 +1,151 @@
+# Every push to main that passes the tests publishes a ready-built Archives
+# for Android, signed with Archives' key, as the newest release: one APK for
+# phones (arm64), one for the Android emulator (x86_64).
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only the job that publishes may write to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # The engine's own tests, on Linux: FerroOS's archive tests, and the same
+  # done the way the app does it on Android.
+  engine:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Test the engine
+        run: cargo test --manifest-path core/Cargo.toml
+
+  # The build (Gradle and everything it downloads) never sees the signing
+  # key: it hands the unsigned APK to the next job, which signs and
+  # publishes it on a runner of its own and runs none of the build's code.
+  build:
+    needs: engine
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - { abi: arm64-v8a, target: aarch64-linux-android }
+          - { abi: x86_64, target: x86_64-linux-android }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The version code counts commits.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # gradle-wrapper.jar is the one Gradle publishes, not a changed copy.
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Test and build
+        run: |
+          set -eu
+          export JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses >/dev/null || true
+          "$sdk" --install "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
+          rustup target add "${{ matrix.target }}"
+          cargo install cargo-ndk --version 4.1.2 --locked
+          ARCHIVES_VERSION_CODE=$(git rev-list --count "$GITHUB_SHA") ARCHIVES_VERSION_NAME="0.1.0-$(echo "$GITHUB_SHA" | cut -c1-7)" \
+            android/build-android.sh "${{ matrix.abi }}" release
+          # Archives can't reach the internet, and asks for nothing: no
+          # permission at all in the app as built (whatever the build added).
+          perms=$("$ANDROID_HOME/build-tools/36.0.0/aapt2" dump permissions android/app/build/outputs/apk/release/app-release-unsigned.apk)
+          echo "$perms"
+          if echo "$perms" | grep -E 'uses-permission'; then
+            echo "Archives must not ask for any permission" >&2
+            exit 1
+          fi
+
+      # No logs, no network code: none of it in Archives' own code.
+      - name: Privacy check
+        run: |
+          set -eu
+          if grep -rnE 'android\.util\.Log|\bLog\.[vdiwe]\(|printStackTrace|System\.(out|err)|println\(|java\.net\.|javax\.net\.|HttpURLConnection|WebView' android/app/src/main/java/io; then
+            echo "Archives writes no logs and has no network code" >&2
+            exit 1
+          fi
+          if grep -rnE 'println!|eprintln!|print!|eprint!|dbg!|std::net|TcpStream|UdpSocket' core/src android/rust/src; then
+            echo "Archives' engine writes no logs and has no network code" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-${{ matrix.abi }}
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: unsigned-*
+          path: unsigned
+
+      - name: Sign
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          [ -n "$ANDROID_KEYSTORE" ] || { echo "ANDROID_KEYSTORE isn't set: no APK without a signature" >&2; exit 1; }
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses >/dev/null || true
+          "$sdk" --install "build-tools;36.0.0" >/dev/null
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          # The key exists only for this step, and is gone after it.
+          key=$(mktemp)
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE" | base64 -d >"$key"
+          for pair in arm64-v8a:archives-android-arm64.apk x86_64:archives-android-x86_64.apk; do
+            abi=${pair%%:*}
+            APK=${pair#*:}
+            ARCHIVES_KS_PASS=$(printf '%s' "$ANDROID_KEYSTORE_PASSWORD" | tr -d '\r\n') "$tools/apksigner" sign \
+              --ks "$key" --ks-type PKCS12 --ks-key-alias archives --ks-pass env:ARCHIVES_KS_PASS --key-pass env:ARCHIVES_KS_PASS \
+              --out "$APK" "unsigned/unsigned-$abi/app-release-unsigned.apk"
+            # Signed with Archives' key, not some other one.
+            got=$("$tools/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            [ "$got" = "$(cat android/release-cert.sha256)" ] || { echo "signed with $got, not Archives' key" >&2; exit 1; }
+            sha256sum "$APK" >"$APK.sha256"
+          done
+          rm -f "$key"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          short=$(echo "$GITHUB_SHA" | cut -c1-7)
+          gh release create "build-$short" --target "$GITHUB_SHA" --latest \
+            --title "Archives $short" \
+            --notes "Archives for Android 8 and newer, built from $GITHUB_SHA. Phones: archives-android-arm64.apk (archives-android-x86_64.apk is for the Android emulator). Signed with Archives' key; its certificate's SHA-256 is $(cat android/release-cert.sha256)." \
+            archives-android-arm64.apk archives-android-arm64.apk.sha256 \
+            archives-android-x86_64.apk archives-android-x86_64.apk.sha256

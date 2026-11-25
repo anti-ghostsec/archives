@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A box with its lid lifted and a zip down its front, in the 108dp
+     adaptive canvas (what's kept on every phone's icon shape: 18 to 90). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- The box. -->
+    <path android:fillColor="#FF3FA89C"
+        android:pathData="M28,44 h52 v30 a6,6 0 0 1 -6,6 h-40 a6,6 0 0 1 -6,-6 Z" />
+    <!-- The lid, lifted. -->
+    <path android:fillColor="#FF6FD0C4"
+        android:pathData="M24,32 h60 a3,3 0 0 1 3,3 v5 a3,3 0 0 1 -3,3 h-60 a3,3 0 0 1 -3,-3 v-5 a3,3 0 0 1 3,-3 Z" />
+    <!-- The zip: its teeth and pull. -->
+    <path android:fillColor="#FFECECF2"
+        android:pathData="M50,46 h4 v3 h-4 Z M54,50 h4 v3 h-4 Z M50,54 h4 v3 h-4 Z M54,58 h4 v3 h-4 Z M50,62 h4 v3 h-4 Z" />
+    <path android:fillColor="#FFECECF2"
+        android:pathData="M49,67 h10 v8 a5,5 0 0 1 -10,0 Z" />
+</vector>

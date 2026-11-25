@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No permissions at all: no internet, and no access to your files beyond
+     the folders you add and the archives you open (Android's file access
+     hands Archives only those). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Archives"
+        android:icon="@mipmap/icon"
+        android:roundIcon="@mipmap/icon"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/no_backup"
+        android:fullBackupContent="false"
+        android:theme="@style/Archives">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ArchiveActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density">
+            <!-- "Open with" from file managers and other apps. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-7z-compressed" />
+                <data android:mimeType="application/vnd.rar" />
+                <data android:mimeType="application/x-rar-compressed" />
+                <data android:mimeType="application/x-rar" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="application/vnd.comicbook-rar" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/x-cbr" />
+            </intent-filter>
+            <!-- Archives a file manager doesn't know the type of: by name. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\.ZIP" />
+                <data android:pathPattern=".*\\.7z" />
+                <data android:pathPattern=".*\\.7Z" />
+                <data android:pathPattern=".*\\.rar" />
+                <data android:pathPattern=".*\\.RAR" />
+            </intent-filter>
+            <!-- Share an archive to Archives. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-7z-compressed" />
+                <data android:mimeType="application/vnd.rar" />
+                <data android:mimeType="application/x-rar-compressed" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

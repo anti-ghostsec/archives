@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Archives" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#FF4FC1B4</item>
+        <item name="android:windowBackground">@color/home</item>
+        <item name="android:statusBarColor">@color/home</item>
+        <item name="android:navigationBarColor">@color/home</item>
+    </style>
+</resources>
